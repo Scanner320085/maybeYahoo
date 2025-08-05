@@ -4,7 +4,7 @@
       <% if content_for?(:prev_nav) %>
         <%= yield :prev_nav %>
       <% else %>
-        <%= render DS::Link.new(
+        <%= render LinkComponent.new(
           variant: "icon",
           icon: "arrow-left",
           href: content_for(:previous_path) || root_path
@@ -18,7 +18,7 @@
       <% if content_for?(:cancel_action) %>
         <%= yield :cancel_action %>
       <% else %>
-        <%= render DS::Link.new(
+        <%= render LinkComponent.new(
           variant: "icon",
           icon: "x",
           href: content_for(:cancel_path) || root_path

@@ -2,18 +2,13 @@ class TransferMatchesController < ApplicationController
   before_action :set_entry
 
   def new
-    @accounts = Current.family.accounts.visible.alphabetically.where.not(id: @entry.account_id)
+    @accounts = Current.family.accounts.alphabetically.where.not(id: @entry.account_id)
     @transfer_match_candidates = @entry.transaction.transfer_match_candidates
   end
 
   def create
     @transfer = build_transfer
-    Transfer.transaction do
-      @transfer.save!
-      @transfer.outflow_transaction.update!(kind: Transfer.kind_for_account(@transfer.outflow_transaction.entry.account))
-      @transfer.inflow_transaction.update!(kind: "funds_movement")
-    end
-
+    @transfer.save!
     @transfer.sync_account_later
 
     redirect_back_or_to transactions_path, notice: "Transfer created"

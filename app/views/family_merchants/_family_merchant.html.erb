@@ -15,7 +15,7 @@
     </p>
   </div>
   <div class="justify-self-end">
-    <%= render DS::Menu.new do |menu| %>
+    <%= render MenuComponent.new do |menu| %>
       <% menu.with_item(variant: "link", text: "Edit", href: edit_family_merchant_path(family_merchant), icon: "pencil", data: { turbo_frame: "modal" }) %>
       <% menu.with_item(
         variant: "button",

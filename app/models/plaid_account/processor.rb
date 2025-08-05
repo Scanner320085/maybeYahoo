@@ -51,13 +51,6 @@ class PlaidAccount::Processor
         )
 
         account.save!
-
-        # Create or update the current balance anchor valuation for event-sourced ledger
-        # Note: This is a partial implementation. In the future, we'll introduce HoldingValuation
-        # to properly track the holdings vs. cash breakdown, but for now we're only tracking
-        # the total balance in the current anchor. The cash_balance field on the account model
-        # is still being used for the breakdown.
-        account.set_current_balance(balance_calculator.balance)
       end
     end
 
@@ -91,12 +84,9 @@ class PlaidAccount::Processor
       if plaid_account.plaid_type == "investment"
         @balance_calculator ||= PlaidAccount::Investments::BalanceCalculator.new(plaid_account, security_resolver: security_resolver)
       else
-        balance = plaid_account.current_balance || plaid_account.available_balance || 0
-
-        # We don't currently distinguish "cash" vs. "non-cash" balances for non-investment accounts.
         OpenStruct.new(
-          balance: balance,
-          cash_balance: balance
+          balance: plaid_account.current_balance || plaid_account.available_balance,
+          cash_balance: plaid_account.available_balance || 0
         )
       end
     end

@@ -101,16 +101,36 @@ class Security::Resolver
     end
 
     def find_or_create_provider_match!(match)
-      security = Security.find_or_initialize_by(
-        ticker: match.ticker,
-        exchange_operating_mic: match.exchange_operating_mic,
+      # Normalisation
+      ticker = match.ticker.to_s.strip.upcase
+      exchange = match.exchange_operating_mic.to_s.strip.upcase
+
+      # Recherche manuelle insensible à la casse
+      existing = Security.where("LOWER(ticker) = ? AND LOWER(exchange_operating_mic) = ?", ticker.downcase, exchange.downcase).first
+
+      if existing
+        Rails.logger.debug "[Resolver] ✅ Security EXISTANT trouvé : #{existing.id}"
+        return existing
+      end
+
+      # Sinon, on le crée
+      security = Security.new(
+        ticker: ticker,
+        exchange_operating_mic: exchange,
+        name: match.name,
+        country_code: match.country_code,
+        logo_url: match.logo_url
       )
 
-      security.country_code = match.country_code
-      security.save!
-
-      security
+      if security.save
+        Rails.logger.debug "[Resolver] ✅ Nouveau security créé avec ID=#{security.id}"
+        security
+      else
+        Rails.logger.error "[Resolver] ❌ Échec save : #{security.errors.full_messages.join(', ')}"
+        raise ActiveRecord::RecordInvalid, security
+      end
     end
+
 
     def provider_search_result
       params = {

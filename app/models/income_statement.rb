@@ -10,7 +10,7 @@ class IncomeStatement
   end
 
   def totals(transactions_scope: nil)
-    transactions_scope ||= family.transactions.visible
+    transactions_scope ||= family.transactions.active
 
     result = totals_query(transactions_scope: transactions_scope)
 
@@ -20,7 +20,8 @@ class IncomeStatement
     ScopeTotals.new(
       transactions_count: result.sum(&:transactions_count),
       income_money: Money.new(total_income, family.currency),
-      expense_money: Money.new(total_expense, family.currency)
+      expense_money: Money.new(total_expense, family.currency),
+      missing_exchange_rates?: result.any?(&:missing_exchange_rates?)
     )
   end
 
@@ -53,8 +54,8 @@ class IncomeStatement
   end
 
   private
-    ScopeTotals = Data.define(:transactions_count, :income_money, :expense_money)
-    PeriodTotal = Data.define(:classification, :total, :currency, :category_totals)
+    ScopeTotals = Data.define(:transactions_count, :income_money, :expense_money, :missing_exchange_rates?)
+    PeriodTotal = Data.define(:classification, :total, :currency, :missing_exchange_rates?, :category_totals)
     CategoryTotal = Data.define(:category, :total, :currency, :weight)
 
     def categories
@@ -62,7 +63,7 @@ class IncomeStatement
     end
 
     def build_period_total(classification:, period:)
-      totals = totals_query(transactions_scope: family.transactions.visible.in_period(period)).select { |t| t.classification == classification }
+      totals = totals_query(transactions_scope: family.transactions.active.in_period(period)).select { |t| t.classification == classification }
       classification_total = totals.sum(&:total)
 
       uncategorized_category = family.categories.uncategorized
@@ -94,30 +95,25 @@ class IncomeStatement
         classification: classification,
         total: category_totals.reject { |ct| ct.category.subcategory? }.sum(&:total),
         currency: family.currency,
+        missing_exchange_rates?: totals.any?(&:missing_exchange_rates?),
         category_totals: category_totals
       )
     end
 
     def family_stats(interval: "month")
       @family_stats ||= {}
-      @family_stats[interval] ||= Rails.cache.fetch([
-        "income_statement", "family_stats", family.id, interval, family.entries_cache_version
-      ]) { FamilyStats.new(family, interval:).call }
+      @family_stats[interval] ||= FamilyStats.new(family, interval:).call
     end
 
     def category_stats(interval: "month")
       @category_stats ||= {}
-      @category_stats[interval] ||= Rails.cache.fetch([
-        "income_statement", "category_stats", family.id, interval, family.entries_cache_version
-      ]) { CategoryStats.new(family, interval:).call }
+      @category_stats[interval] ||= CategoryStats.new(family, interval:).call
     end
 
     def totals_query(transactions_scope:)
-      sql_hash = Digest::MD5.hexdigest(transactions_scope.to_sql)
-
-      Rails.cache.fetch([
-        "income_statement", "totals_query", family.id, sql_hash, family.entries_cache_version
-      ]) { Totals.new(family, transactions_scope: transactions_scope).call }
+      @totals_query_cache ||= {}
+      cache_key = Digest::MD5.hexdigest(transactions_scope.to_sql)
+      @totals_query_cache[cache_key] ||= Totals.new(family, transactions_scope: transactions_scope).call
     end
 
     def monetizable_currency

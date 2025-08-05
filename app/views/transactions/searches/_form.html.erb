@@ -17,13 +17,14 @@
       </div>
     </div>
 
-    <%= render DS::Menu.new(variant: "button", no_padding: true) do |menu| %>
+    <%= render MenuComponent.new(variant: "button", no_padding: true) do |menu| %>
       <% menu.with_button(
         id: "transaction-filters-button",
         type: "button",
         text: "Filter",
         variant: "outline",
-        icon: "list-filter"
+        icon: "list-filter",
+        data: { menu_target: "button" }
       ) %>
 
       <% menu.with_custom_content do %>

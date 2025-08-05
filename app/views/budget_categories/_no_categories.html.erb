@@ -6,12 +6,12 @@
     </p>
 
     <div class="flex items-center gap-2">
-      <%= render DS::Button.new(
+      <%= render ButtonComponent.new(
         text: "Use defaults (recommended)",
         href: bootstrap_categories_path,
       ) %>
 
-      <%= render DS::Link.new(
+      <%= render LinkComponent.new(
         text: "New category",
         variant: "outline",
         icon: "plus",

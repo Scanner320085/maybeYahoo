@@ -2,9 +2,9 @@ module AccountableResource
   extend ActiveSupport::Concern
 
   included do
-    include Periodable
+    include ScrollFocusable, Periodable
 
-    before_action :set_account, only: [ :show, :edit, :update ]
+    before_action :set_account, only: [ :show, :edit, :update, :destroy ]
     before_action :set_link_options, only: :new
   end
 
@@ -27,7 +27,9 @@ module AccountableResource
     @q = params.fetch(:q, {}).permit(:search)
     entries = @account.entries.search(@q).reverse_chronological
 
-    @pagy, @entries = pagy(entries, limit: params[:per_page] || "10")
+    set_focused_record(entries, params[:focused_record_id])
+
+    @pagy, @entries = pagy(entries, limit: params[:per_page] || "10", params: ->(params) { params.except(:focused_record_id) })
   end
 
   def edit
@@ -41,27 +43,19 @@ module AccountableResource
   end
 
   def update
-    # Handle balance update if provided
-    if account_params[:balance].present?
-      result = @account.set_current_balance(account_params[:balance].to_d)
-      unless result.success?
-        @error_message = result.error_message
-        render :edit, status: :unprocessable_entity
-        return
-      end
-      @account.sync_later
-    end
-
-    # Update remaining account attributes
-    update_params = account_params.except(:return_to, :balance, :currency)
-    unless @account.update(update_params)
-      @error_message = @account.errors.full_messages.join(", ")
-      render :edit, status: :unprocessable_entity
-      return
-    end
-
+    @account.update_with_sync!(account_params.except(:return_to))
     @account.lock_saved_attributes!
-    redirect_back_or_to account_path(@account), notice: t("accounts.update.success", type: accountable_type.name.underscore.humanize)
+
+    redirect_back_or_to @account, notice: t("accounts.update.success", type: accountable_type.name.underscore.humanize)
+  end
+
+  def destroy
+    if @account.linked?
+      redirect_to account_path(@account), alert: "Cannot delete a linked account"
+    else
+      @account.destroy_later
+      redirect_to accounts_path, notice: t("accounts.destroy.success", type: accountable_type.name.underscore.humanize)
+    end
   end
 
   private
@@ -80,7 +74,7 @@ module AccountableResource
 
     def account_params
       params.require(:account).permit(
-        :name, :balance, :subtype, :currency, :accountable_type, :return_to,
+        :name, :is_active, :balance, :subtype, :currency, :accountable_type, :return_to,
         accountable_attributes: self.class.permitted_accountable_attributes
       )
     end

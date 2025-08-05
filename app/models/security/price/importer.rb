@@ -40,9 +40,11 @@ class Security::Price::Importer
     end
 
     gapfilled_prices = effective_start_date.upto(end_date).map do |date|
+      puts "Date: #{date}, provider_prices: #{provider_prices}"
       db_price_value       = db_prices[date]&.price
       provider_price_value = provider_prices[date]&.price
       provider_currency    = provider_prices[date]&.currency
+
 
       chosen_price = if clear_cache
         provider_price_value || db_price_value   # overwrite when possible
@@ -80,6 +82,7 @@ class Security::Price::Importer
         )
 
         if response.success?
+          puts "#{response.inspect}"
           response.data.index_by(&:date)
         else
           Rails.logger.warn("#{security_provider.class.name} could not fetch prices for #{security.ticker} between #{provider_fetch_start_date} and #{end_date}. Provider error: #{response.error.message}")
@@ -116,6 +119,7 @@ class Security::Price::Importer
     end
 
     def start_price_value
+      puts "[DEBUG] start_date.class: #{start_date}"
       provider_price_value = provider_prices.select { |date, _| date <= start_date }
                                             .max_by { |date, _| date }
                                             &.last&.price

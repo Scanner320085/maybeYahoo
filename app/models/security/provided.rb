@@ -49,6 +49,8 @@ module Security::Provided
       date: date
     )
 
+
+    puts "[DEBUG] response: #{response.inspect}"
     return nil unless response.success? # Provider error
 
     price = response.data

@@ -14,7 +14,7 @@ module Entryable
 
     scope :with_entry, -> { joins(:entry) }
 
-    scope :visible, -> { with_entry.merge(Entry.visible) }
+    scope :active, -> { with_entry.merge(Entry.active) }
 
     scope :in_period, ->(period) {
       with_entry.where(entries: { date: period.start_date..period.end_date })

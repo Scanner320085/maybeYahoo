@@ -1,6 +1,6 @@
-<%= render DS::Dialog.new do |dialog| %>
+<%= render DialogComponent.new do |dialog| %>
   <% dialog.with_header(title: t(".title")) %>
   <% dialog.with_body do %>
-    <%= render "trades/form", model: @model, account: @account %>
+    <%= render "trades/form", entry: @entry %>
   <% end %>
 <% end %>

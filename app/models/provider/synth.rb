@@ -1,7 +1,6 @@
 class Provider::Synth < Provider
   include ExchangeRateConcept, SecurityConcept
 
-  # Subclass so errors caught in this provider are raised as Provider::Synth::Error
   Error = Class.new(Provider::Error)
   InvalidExchangeRateError = Class.new(Error)
   InvalidSecurityPriceError = Class.new(Error)
@@ -12,26 +11,26 @@ class Provider::Synth < Provider
 
   def healthy?
     with_provider_response do
-      response = client.get("#{base_url}/user")
-      JSON.parse(response.body).dig("id").present?
+      json_string = '{"email": "dwight@example.com", "name": "Dwight Schrute","plan": "Free","api_calls_remaining": 970,"api_limit": 1000}'
+
+      # JSON.parse(json_string).dig("email").present?
     end
   end
 
   def usage
     with_provider_response do
-      response = client.get("#{base_url}/user")
-
-      parsed = JSON.parse(response.body)
+      json_string = '{"email": "dwight@example.com", "name": "Dwight Schrute","plan": "Free","api_calls_remaining": 970,"api_limit": 1000}'
+      parsed = JSON.parse(json_string)
 
       remaining = parsed.dig("api_calls_remaining")
       limit = parsed.dig("api_limit")
       used = limit - remaining
 
       UsageData.new(
-        used: used,
-        limit: limit,
-        utilization: used.to_f / limit * 100,
-        plan: parsed.dig("plan"),
+      used: used,
+      limit: limit,
+      utilization: used.to_f / limit * 100,
+      plan: parsed.dig("plan"),
       )
     end
   end
@@ -42,34 +41,40 @@ class Provider::Synth < Provider
 
   def fetch_exchange_rate(from:, to:, date:)
     with_provider_response do
-      response = client.get("#{base_url}/rates/historical") do |req|
-        req.params["date"] = date.to_s
-        req.params["from"] = from
-        req.params["to"] = to
+      query = BasicYahooFinance::Query.new
+      pair = "#{from}#{to}=X"
+      data = query.historical(pair, date, date)
+      data = data[0]
+      Rails.logger.warn("[ExchangeRate] Data brut pour #{pair} au #{date}: #{data.inspect}")
+
+      dates = data.dig("timestamp").map { |d| Time.at(d) }
+      prices = data.dig("indicators", "quote")
+      prices = prices[0].dig("close")
+
+      entryDate = dates.first
+      entryPrice = prices.first
+      raise InvalidExchangeRateError, "No rate for #{pair} on #{date}" unless entryDate && entryPrice
+
+      dates.zip(prices).map do |date, price|
+        Rate.new(date: entryDate, from:, to:, rate: entryPrice)
       end
-
-      rates = JSON.parse(response.body).dig("data", "rates")
-
-      Rate.new(date: date.to_date, from:, to:, rate: rates.dig(to))
     end
   end
 
   def fetch_exchange_rates(from:, to:, start_date:, end_date:)
     with_provider_response do
-      data = paginate(
-        "#{base_url}/rates/historical-range",
-        from: from,
-        to: to,
-        date_start: start_date.to_s,
-        date_end: end_date.to_s
-      ) do |body|
-        body.dig("data")
-      end
+      query = BasicYahooFinance::Query.new
+      pair = "#{from}#{to}=X"
+      start_date = start_date.to_s
+      end_date = end_date.to_s
+      data = query.historical(pair, start_date, end_date)
+      data = data[0]
 
-      data.paginated.map do |rate|
-        date = rate.dig("date")
-        rate = rate.dig("rates", to)
+      dates = data.dig("timestamp").map { |d| Date.parse(Time.at(d).strftime("%Y-%m-%d")) }
+      rates = data.dig("indicators", "quote")
+      rates = rates[0].dig("close")
 
+      dates.zip(rates).map do |date, rate|
         if date.nil? || rate.nil?
           Rails.logger.warn("#{self.class.name} returned invalid rate data for pair from: #{from} to: #{to} on: #{date}.  Rate data: #{rate.inspect}")
           Sentry.capture_exception(InvalidExchangeRateError.new("#{self.class.name} returned invalid rate data"), level: :warning) do |scope|
@@ -79,7 +84,7 @@ class Provider::Synth < Provider
           next
         end
 
-        Rate.new(date: date.to_date, from:, to:, rate:)
+        Rate.new(date: date, from:, to:, rate: rate)
       end.compact
     end
   end
@@ -90,161 +95,102 @@ class Provider::Synth < Provider
 
   def search_securities(symbol, country_code: nil, exchange_operating_mic: nil)
     with_provider_response do
-      response = client.get("#{base_url}/tickers/search") do |req|
-        req.params["name"] = symbol
-        req.params["dataset"] = "limited"
-        req.params["country_code"] = country_code if country_code.present?
-        # Synth uses mic_code, which encompasses both exchange_mic AND exchange_operating_mic (union)
-        req.params["mic_code"] = exchange_operating_mic if exchange_operating_mic.present?
-        req.params["limit"] = 25
-      end
+      query = BasicYahooFinance::Query.new
 
-      parsed = JSON.parse(response.body)
+      data = query.search(symbol)
 
-      parsed.dig("data").map do |security|
+      # Yahoo Finance retourne un tableau sous :quotes
+      results = data.map do |security|
+        # retrievedSymbol = security.dig("symbol")
+        country_code = query.quotes(security.dig("symbol"))
+        country_code = country_code.dig(security.dig("symbol"))
+        country_code = country_code.dig("region")
         Security.new(
           symbol: security.dig("symbol"),
-          name: security.dig("name"),
-          logo_url: security.dig("logo_url"),
-          exchange_operating_mic: security.dig("exchange", "operating_mic_code"),
-          country_code: security.dig("exchange", "country_code")
-        )
+          name: security.dig("shortname") || security.dig("longname") || security.dig("name"),
+          logo_url: "https://logo.synthfinance.com/#{security.dig("symbol")}", # Yahoo ne fournit pas de logo dans la recherche
+          exchange_operating_mic: security.dig("exchDisp"), # c’est le nom affiché, pas un MIC strict
+          country_code: country_code # Yahoo ne fournit pas de code pays dans la recherche
+          )
       end
+      results
     end
   end
 
-  def fetch_security_info(symbol:, exchange_operating_mic:)
+  def fetch_security_info(symbol:, exchange_operating_mic: nil)
     with_provider_response do
-      response = client.get("#{base_url}/tickers/#{symbol}") do |req|
-        req.params["operating_mic"] = exchange_operating_mic
-      end
-
-      data = JSON.parse(response.body).dig("data")
+      query = BasicYahooFinance::Query.new
+      data = query.quote(symbol)
+      data = data[symbol]
 
       SecurityInfo.new(
-        symbol: symbol,
-        name: data.dig("name"),
-        links: data.dig("links"),
-        logo_url: data.dig("logo_url"),
-        description: data.dig("description"),
-        kind: data.dig("kind"),
-        exchange_operating_mic: exchange_operating_mic
+      symbol: symbol,
+      name: data[:longName],
+      links: {},
+      logo_url: nil,
+      description: data[:longBusinessSummary],
+      kind: data[:quoteType],
+      exchange_operating_mic: data[:exchange]
       )
     end
   end
 
   def fetch_security_price(symbol:, exchange_operating_mic: nil, date:)
-    with_provider_response do
-      historical_data = fetch_security_prices(symbol:, exchange_operating_mic:, start_date: date, end_date: date)
+    response = fetch_security_prices(
+      symbol: symbol,
+      exchange_operating_mic: exchange_operating_mic,
+      start_date: date,
+      end_date: date
+    )
 
-      raise ProviderError, "No prices found for security #{symbol} on date #{date}" if historical_data.data.empty?
+    return Provider::Response.new(success?: false, error: response.error) unless response.success?
 
-      historical_data.data.first
+    price = response.data.find { |p| p.date.to_date == date.to_date }
+
+    if price
+      Provider::Response.new(success?: true, data: price, error: nil)
+    else
+      Provider::Response.new(success?: false, data: nil, error: Provider::Synth::Error.new("No price found on #{date}"))
     end
   end
 
   def fetch_security_prices(symbol:, exchange_operating_mic: nil, start_date:, end_date:)
+    if start_date == end_date
+      end_date += 1.day
+    end
     with_provider_response do
-      params = {
-        start_date: start_date,
-        end_date: end_date,
-        operating_mic_code: exchange_operating_mic
-      }.compact
+      query = BasicYahooFinance::Query.new
+      start_date = start_date.to_s
+      end_date = end_date.to_s
+      data = query.historical(symbol, start_date, end_date)
+      data = data[0]
 
-      data = paginate(
-        "#{base_url}/tickers/#{symbol}/open-close",
-        params
-      ) do |body|
-        body.dig("prices")
-      end
+      currency = data.dig("meta", "currency")
+      exchange_operating_mic = data.dig("meta", "exchangeName")
+      symbolGet = data.dig("meta", "symbol")
 
-      currency = data.first_page.dig("currency")
-      exchange_operating_mic = data.first_page.dig("exchange", "operating_mic_code")
+      dates = data.dig("timestamp").map { |d| Date.parse(Time.at(d).strftime("%Y-%m-%d")) }
+      prices = data.dig("indicators", "quote")
+      prices = prices[0].dig("close") || prices[0].dig("open")
 
-      data.paginated.map do |price|
-        date = price.dig("date")
-        price = price.dig("close") || price.dig("open")
-
-        if date.nil? || price.nil?
-          Rails.logger.warn("#{self.class.name} returned invalid price data for security #{symbol} on: #{date}.  Price data: #{price.inspect}")
-          Sentry.capture_exception(InvalidSecurityPriceError.new("#{self.class.name} returned invalid security price data"), level: :warning) do |scope|
-            scope.set_context("security", { symbol: symbol, date: date })
-          end
-
-          next
+      if dates.nil? || prices.nil?
+        Rails.logger.warn("#{self.class.name}    #{symbol} on: #{date}.  Price data: #{price.inspect}")
+        Sentry.capture_exception(InvalidSecurityPriceError.new("#{self.class.name} returned invalid security price data"), level: :warning) do |scope|
+          scope.set_context("security", { symbol: symbol, date: date })
         end
 
+        next
+      end
+
+      dates.zip(prices).map do |date, price|
         Price.new(
-          symbol: symbol,
-          date: date.to_date,
-          price: price,
-          currency: currency,
-          exchange_operating_mic: exchange_operating_mic
+            symbol: symbolGet,
+            date: date,
+            price: price,
+            currency: currency,
+            exchange_operating_mic: exchange_operating_mic
         )
       end.compact
     end
   end
-
-  private
-    attr_reader :api_key
-
-    def base_url
-      ENV["SYNTH_URL"] || "https://api.synthfinance.com"
-    end
-
-    def app_name
-      "maybe_app"
-    end
-
-    def app_type
-      Rails.application.config.app_mode
-    end
-
-    def client
-      @client ||= Faraday.new(url: base_url) do |faraday|
-        faraday.request(:retry, {
-          max: 2,
-          interval: 0.05,
-          interval_randomness: 0.5,
-          backoff_factor: 2
-        })
-
-        faraday.response :raise_error
-        faraday.headers["Authorization"] = "Bearer #{api_key}"
-        faraday.headers["X-Source"] = app_name
-        faraday.headers["X-Source-Type"] = app_type
-      end
-    end
-
-    def fetch_page(url, page, params = {})
-      client.get(url, params.merge(page: page))
-    end
-
-    def paginate(url, params = {})
-      results = []
-      page = 1
-      current_page = 0
-      total_pages = 1
-      first_page = nil
-
-      while current_page < total_pages
-        response = fetch_page(url, page, params)
-
-        body = JSON.parse(response.body)
-        first_page = body unless first_page
-        page_results = yield(body)
-        results.concat(page_results)
-
-        current_page = body.dig("paging", "current_page")
-        total_pages = body.dig("paging", "total_pages")
-
-        page += 1
-      end
-
-      PaginatedData.new(
-        paginated: results,
-        first_page: first_page,
-        total_pages: total_pages
-      )
-    end
 end

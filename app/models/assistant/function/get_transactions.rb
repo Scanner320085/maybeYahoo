@@ -134,8 +134,7 @@ class Assistant::Function::GetTransactions < Assistant::Function
   def call(params = {})
     search_params = params.except("order", "page")
 
-    search = Transaction::Search.new(family, filters: search_params)
-    transactions_query = search.transactions_scope
+    transactions_query = family.transactions.active.search(search_params)
     pagy_query = params["order"] == "asc" ? transactions_query.chronological : transactions_query.reverse_chronological
 
     # By default, we give a small page size to force the AI to use filters effectively and save on tokens
@@ -150,7 +149,7 @@ class Assistant::Function::GetTransactions < Assistant::Function
       limit: default_page_size
     )
 
-    totals = search.totals
+    totals = family.income_statement.totals(transactions_scope: transactions_query)
 
     normalized_transactions = paginated_transactions.map do |txn|
       entry = txn.entry
@@ -164,7 +163,7 @@ class Assistant::Function::GetTransactions < Assistant::Function
         category: txn.category&.name,
         merchant: txn.merchant&.name,
         tags: txn.tags.map(&:name),
-        is_transfer: txn.transfer?
+        is_transfer: txn.transfer.present?
       }
     end
 

@@ -52,8 +52,7 @@ class Holding::Materializer
 
     def calculator
       if strategy == :reverse
-        portfolio_snapshot = Holding::PortfolioSnapshot.new(account)
-        Holding::ReverseCalculator.new(account, portfolio_snapshot: portfolio_snapshot)
+        Holding::ReverseCalculator.new(account)
       else
         Holding::ForwardCalculator.new(account)
       end

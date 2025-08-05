@@ -1,9 +1,8 @@
 class Holding::ReverseCalculator
-  attr_reader :account, :portfolio_snapshot
+  attr_reader :account
 
-  def initialize(account, portfolio_snapshot:)
+  def initialize(account)
     @account = account
-    @portfolio_snapshot = portfolio_snapshot
   end
 
   def calculate
@@ -22,8 +21,7 @@ class Holding::ReverseCalculator
     end
 
     def calculate_holdings
-      # Start with the portfolio snapshot passed in from the materializer
-      current_portfolio = portfolio_snapshot.to_h
+      current_portfolio = generate_starting_portfolio
       previous_portfolio = {}
 
       holdings = []
@@ -38,6 +36,24 @@ class Holding::ReverseCalculator
       end
 
       holdings
+    end
+
+    def empty_portfolio
+      securities = portfolio_cache.get_securities
+      securities.each_with_object({}) { |security, hash| hash[security.id] = 0 }
+    end
+
+    # Since this is a reverse sync, we start with today's holdings
+    def generate_starting_portfolio
+      holding_quantities = empty_portfolio
+
+      todays_holdings = account.holdings.where(date: Date.current)
+
+      todays_holdings.each do |holding|
+        holding_quantities[holding.security_id] = holding.qty
+      end
+
+      holding_quantities
     end
 
     def transform_portfolio(previous_portfolio, trade_entries, direction: :forward)

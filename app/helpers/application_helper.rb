@@ -21,7 +21,7 @@ module ApplicationHelper
     if custom
       inline_svg_tag("#{key}.svg", class: icon_classes, **opts)
     elsif as_button
-      render DS::Button.new(variant: "icon", class: extra_classes, icon: key, size: size, type: "button", **opts)
+      render ButtonComponent.new(variant: "icon", class: extra_classes, icon: key, size: size, type: "button", **opts)
     else
       lucide_icon(key, class: icon_classes, **opts)
     end
@@ -110,13 +110,7 @@ module ApplicationHelper
 
   private
     def calculate_total(item, money_method, negate)
-      # Filter out transfer-type transactions from entries
-      # Only Entry objects have entryable transactions, Account objects don't
-      items = item.reject do |i|
-        i.is_a?(Entry) &&
-        i.entryable.is_a?(Transaction) &&
-        i.entryable.transfer?
-      end
+      items = item.reject { |i| i.respond_to?(:entryable) && i.entryable.transfer? }
       total = items.sum(&money_method)
       negate ? -total : total
     end

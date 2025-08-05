@@ -18,7 +18,6 @@ class Family < ApplicationRecord
   has_many :invitations, dependent: :destroy
 
   has_many :imports, dependent: :destroy
-  has_many :family_exports, dependent: :destroy
 
   has_many :entries, through: :accounts
   has_many :transactions, through: :accounts
@@ -92,7 +91,6 @@ class Family < ApplicationRecord
     entries.order(:date).first&.date || Date.current
   end
 
-  # Used for invalidating family / balance sheet related aggregation queries
   def build_cache_key(key, invalidate_on_data_updates: false)
     # Our data sync process updates this timestamp whenever any family account successfully completes a data update.
     # By including it in the cache key, we can expire caches every time family account data changes.
@@ -101,17 +99,8 @@ class Family < ApplicationRecord
     [
       id,
       key,
-      data_invalidation_key,
-      accounts.maximum(:updated_at)
+      data_invalidation_key
     ].compact.join("_")
-  end
-
-  # Used for invalidating entry related aggregation queries
-  def entries_cache_version
-    @entries_cache_version ||= begin
-      ts = entries.maximum(:updated_at)
-      ts.present? ? ts.to_i : 0
-    end
   end
 
   def self_hoster?

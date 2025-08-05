@@ -2,14 +2,13 @@
 
 <div id="<%= account_group.dom_id(tab: all_tab ? :all : nil, mobile: mobile) %>">
   <% is_open = open.nil? ? account_group.accounts.any? { |account| page_active?(account_path(account)) } : open %>
-  <%= render DS::Disclosure.new(align: :left, open: is_open) do |disclosure| %>
+  <%= render DisclosureComponent.new(title: account_group.name, align: :left, open: is_open) do |disclosure| %>
     <% disclosure.with_summary_content do %>
-      <div class="flex items-center gap-3">
-        <%= icon "chevron-right", class: "group-open:transform group-open:rotate-90" %>
-        <%= tag.span class: class_names("text-sm text-primary font-medium", "animate-pulse" => account_group.syncing?) do %>
-          <%= account_group.name %>
-        <% end %>
-      </div>
+      <% if account_group.syncing? %>
+        <div class="ml-2 group-open:hidden">
+          <%= render partial: "shared/sync_indicator", locals: { size: "xs" } %>
+        </div>
+      <% end %>
 
       <div class="ml-auto text-right grow">
         <%= tag.p format_money(account_group.total_money), class: "text-sm font-medium text-primary" %>
@@ -33,7 +32,10 @@
 
           <div class="min-w-0 grow">
             <div class="flex items-center gap-2 mb-0.5">
-              <%= tag.p account.name, class: class_names("text-sm text-primary font-medium truncate", "animate-pulse" => account.syncing?) %>
+              <%= tag.p account.name, class: "text-sm text-primary font-medium truncate" %>
+              <% if account.syncing? %>
+                <%= render partial: "shared/sync_indicator", locals: { size: "xs" } %>
+              <% end %>
             </div>
             <%= tag.p account.short_subtype_label, class: "text-sm text-secondary truncate" %>
           </div>
@@ -51,7 +53,7 @@
     </div>
 
     <div class="my-2">
-      <%= render DS::Link.new(
+      <%= render LinkComponent.new(
       href: new_polymorphic_path(account_group.key, step: "method_select"),
       text: "New #{account_group.name.downcase.singularize}",
       icon: "plus",
