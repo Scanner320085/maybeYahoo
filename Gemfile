@@ -23,11 +23,7 @@ gem "lucide-rails", github: "maybe-finance/lucide-rails"
 gem "stimulus-rails"
 gem "turbo-rails"
 gem "view_component"
-
-# https://github.com/lookbook-hq/lookbook/issues/712
-# TODO: Remove max version constraint when fixed
-gem "lookbook", "2.3.11"
-
+gem "lookbook", ">= 2.3.7"
 gem "hotwire_combobox"
 
 # Background Jobs
@@ -41,7 +37,7 @@ gem "sentry-ruby"
 gem "sentry-rails"
 gem "sentry-sidekiq"
 gem "logtail-rails"
-gem "skylight", groups: [ :production ]
+gem "skylight"
 
 # Active Storage
 gem "aws-sdk-s3", "~> 1.177.0", require: false
@@ -51,11 +47,6 @@ gem "image_processing", ">= 1.2"
 gem "ostruct"
 gem "bcrypt", "~> 3.1"
 gem "jwt"
-gem "jbuilder"
-
-# OAuth & API Security
-gem "doorkeeper"
-gem "rack-attack", "~> 6.6"
 gem "faraday"
 gem "faraday-retry"
 gem "faraday-multipart"
@@ -72,7 +63,7 @@ gem "plaid"
 gem "rotp", "~> 6.3"
 gem "rqrcode", "~> 3.0"
 gem "activerecord-import"
-gem "rubyzip", "~> 2.3"
+gem "basic_yahoo_finance", path: "local_gems/basic_yahoo_finance"
 
 # State machines
 gem "aasm"
@@ -90,10 +81,6 @@ group :development, :test do
   gem "dotenv-rails"
 end
 
-if ENV["BENCHMARKING_ENABLED"]
-  gem "dotenv-rails", groups: [ :production ]
-end
-
 group :development do
   gem "hotwire-livereload"
   gem "letter_opener"
@@ -101,8 +88,6 @@ group :development do
   gem "web-console"
   gem "faker"
   gem "benchmark-ips"
-  gem "stackprof"
-  gem "derailed_benchmarks"
   gem "foreman"
 end
 

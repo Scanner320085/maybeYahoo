@@ -38,8 +38,5 @@ module Maybe
     config.lookbook.preview_display_options = {
       theme: [ "light", "dark" ] # available in view as params[:theme]
     }
-
-    # Enable Rack::Attack middleware for API rate limiting
-    config.middleware.use Rack::Attack
   end
 end

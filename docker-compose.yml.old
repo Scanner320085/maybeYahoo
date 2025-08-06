@@ -1,0 +1,80 @@
+services:
+  redis:
+    image: redis
+    container_name: maybe-redis
+    hostname: maybe-redis
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping || exit 1"]
+    environment:
+      - TZ=Europe/Paris
+    volumes:
+      - /Users/mariusarnaud/Plex/Maybe/redis:/data:rw
+      #- /share/CACHEDEV1_DATA/Public/Maybe/redis:/data:rw
+    restart: on-failure:5  
+  app:
+    image: scanner320085/maybe-app:latest
+    container_name: maybe-app
+    volumes:
+      #- /share/CACHEDEV1_DATA/Public/Maybe/rails/storage:/rails/storage
+      - /Users/mariusarnaud/Plex/Maybe/rails/storage:/rails/storage
+    ports:
+      - 3000:3000
+    restart: unless-stopped
+    environment:
+      SELF_HOSTED: "true"
+      RAILS_FORCE_SSL: "false"
+      RAILS_ASSUME_SSL: "false"
+      GOOD_JOB_EXECUTION_MODE: async
+      SECRET_KEY_BASE: 581fb0e8ea9ea41ce3c0aaa031f533617234e5d15815a6c9b8d9929dd94cc55819e0f2481221ee5d3526cda3a7c1998b39cdc2728bfadbf5f21426916dc97c30
+      SYNTH_API_KEY: dfhdskjgdfksgkfdbkdsmjbfnm
+      DB_HOST: maybe-postgres
+      POSTGRES_DB: maybeproduction
+      REDIS_URL: redis://maybe-redis:6379/1
+      POSTGRES_USER: maybe_user
+      POSTGRES_PASSWORD: 8522MARIOsite
+      OPENAI_ACCESS_TOKEN: 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
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+  worker:
+    image: scanner320085/maybe-app:latest
+    command: bundle exec sidekiq
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    volumes:
+      - .:/rails
+    environment:
+      SELF_HOSTED: "true"
+      RAILS_FORCE_SSL: "false"
+      RAILS_ASSUME_SSL: "false"
+      GOOD_JOB_EXECUTION_MODE: async
+      SECRET_KEY_BASE: 581fb0e8ea9ea41ce3c0aaa031f533617234e5d15815a6c9b8d9929dd94cc55819e0f2481221ee5d3526cda3a7c1998b39cdc2728bfadbf5f21426916dc97c30
+      SYNTH_API_KEY: dfhdskjgdfksgkfdbkdsmjbfnm
+      DB_HOST: maybe-postgres
+      POSTGRES_DB: maybeproduction
+      REDIS_URL: redis://maybe-redis:6379/1
+      POSTGRES_USER: maybe_user
+      POSTGRES_PASSWORD: 8522MARIOsite
+      OPENAI_ACCESS_TOKEN: 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
+
+  postgres:
+    image: postgres:16
+    container_name: maybe-postgres
+    restart: unless-stopped
+    ports:
+      - 5433:5432
+    environment:
+      POSTGRES_USER: maybe_user
+      POSTGRES_DB: maybeproduction
+      POSTGRES_PASSWORD: 8522MARIOsite
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB" ]
+      interval: 5s
+      timeout: 5s
+      retries: 5

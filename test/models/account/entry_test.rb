@@ -17,7 +17,7 @@ class EntryTest < ActiveSupport::TestCase
     existing_valuation = entries :valuation
 
     new_valuation = Entry.new \
-      entryable: Valuation.new(kind: "reconciliation"),
+      entryable: Valuation.new,
       account: existing_valuation.account,
       date: existing_valuation.date, # invalid
       currency: existing_valuation.currency,
@@ -67,21 +67,21 @@ class EntryTest < ActiveSupport::TestCase
     assert_equal 0, family.entries.search(params).size
   end
 
-  test "visible scope only returns entries from visible accounts" do
+  test "active scope only returns entries from active accounts" do
     # Create transactions for all account types
-    visible_transaction = create_transaction(account: accounts(:depository), name: "Visible transaction")
-    invisible_transaction = create_transaction(account: accounts(:credit_card), name: "Invisible transaction")
+    active_transaction = create_transaction(account: accounts(:depository), name: "Active transaction")
+    inactive_transaction = create_transaction(account: accounts(:credit_card), name: "Inactive transaction")
 
     # Update account statuses
-    accounts(:credit_card).disable!
+    accounts(:credit_card).update!(is_active: false)
 
     # Test the scope
-    visible_entries = Entry.visible
+    active_entries = Entry.active
 
     # Should include entry from active account
-    assert_includes visible_entries, visible_transaction
+    assert_includes active_entries, active_transaction
 
-    # Should not include entry from disabled account
-    assert_not_includes visible_entries, invisible_transaction
+    # Should not include entry from inactive account
+    assert_not_includes active_entries, inactive_transaction
   end
 end

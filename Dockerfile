@@ -27,6 +27,7 @@ RUN apt-get install --no-install-recommends -y build-essential libpq-dev git pkg
 
 # Install application gems
 COPY .ruby-version Gemfile Gemfile.lock ./
+COPY local_gems/ ./local_gems/
 RUN bundle install
 
 RUN rm -rf ~/.bundle/ "${BUNDLE_PATH}"/ruby/*/cache "${BUNDLE_PATH}"/ruby/*/bundler/gems/*/.git

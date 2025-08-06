@@ -24,14 +24,14 @@ class TradesTest < ApplicationSystemTestCase
     fill_in "Ticker symbol", with: "AAPL"
     fill_in "Date", with: Date.current
     fill_in "Quantity", with: shares_qty
-    fill_in "model[price]", with: 214.23
+    fill_in "entry[price]", with: 214.23
 
     click_button "Add transaction"
 
     visit_trades
 
     within_trades do
-      assert_text "Buy #{shares_qty}.0 shares of AAPL"
+      assert_text "Buy #{shares_qty} shares of AAPL"
     end
   end
 
@@ -42,17 +42,17 @@ class TradesTest < ApplicationSystemTestCase
     open_new_trade_modal
 
     select "Sell", from: "Type"
-    fill_in "Ticker symbol", with: "AAPL"
+    fill_in "Ticker symbol", with: aapl.ticker
     fill_in "Date", with: Date.current
     fill_in "Quantity", with: qty
-    fill_in "model[price]", with: 215.33
+    fill_in "entry[price]", with: 215.33
 
     click_button "Add transaction"
 
     visit_trades
 
     within_trades do
-      assert_text "Sell #{qty}.0 shares of AAPL"
+      assert_text "Sell #{qty} shares of AAPL"
     end
   end
 

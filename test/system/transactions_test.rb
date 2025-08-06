@@ -34,7 +34,6 @@ class TransactionsTest < ApplicationSystemTestCase
 
     within "form#transactions-search" do
       fill_in "Search transactions ...", with: @transaction.name
-      find("#q_search").send_keys(:tab) # Trigger blur to submit form
     end
 
     assert_selector "#" + dom_id(@transaction), count: 1
@@ -119,25 +118,22 @@ class TransactionsTest < ApplicationSystemTestCase
 
     assert_text "No entries found"
 
-    # Wait for Turbo to finish updating the DOM
-    sleep 0.5
-
     # Page reload doesn't affect results
     visit current_url
 
     assert_text "No entries found"
 
-    # Remove all filters by clicking their X buttons
-    # Get all the filter buttons at once to avoid stale elements
-    filter_count = page.all("ul#transaction-search-filters li button").count
-
-    # Click each one with a small delay to let Turbo update
-    filter_count.times do
-      page.all("ul#transaction-search-filters li button").first.click
-      sleep 0.1
+    within "ul#transaction-search-filters" do
+      find("li", text: account.name).first("button").click
+      find("li", text: "on or after #{10.days.ago.to_date}").first("button").click
+      find("li", text: "on or before #{1.day.ago.to_date}").first("button").click
+      find("li", text: "Income").first("button").click
+      find("li", text: "less than 200").first("button").click
+      find("li", text: category.name).first("button").click
+      find("li", text: merchant.name).first("button").click
     end
 
-    assert_text @transaction.name
+    assert_selector "#" + dom_id(@transaction), count: 1
   end
 
   test "can select and deselect entire page of transactions" do
@@ -193,9 +189,9 @@ class TransactionsTest < ApplicationSystemTestCase
     end
     select "Deposit", from: "Type"
     fill_in "Date", with: transfer_date
-    fill_in "model[amount]", with: 175.25
+    fill_in "entry[amount]", with: 175.25
     click_button "Add transaction"
-    within "#" + dom_id(investment_account, "entries_#{transfer_date}") do
+    within "#entry-group-" + transfer_date.to_s do
       assert_text "175.25"
     end
   end
@@ -207,7 +203,6 @@ class TransactionsTest < ApplicationSystemTestCase
     inflow_entry = create_transaction("inflow", 1.day.ago.to_date, -500, account: investment_account)
     @user.family.auto_match_transfers!
     visit transactions_url
-
     within "#entry-group-" + Date.current.to_s + "-totals" do
       assert_text "-$100.00" # transaction eleven from setup
     end
