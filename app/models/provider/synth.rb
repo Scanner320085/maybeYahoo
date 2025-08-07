@@ -156,7 +156,7 @@ class Provider::Synth < Provider
 
   def fetch_security_prices(symbol:, exchange_operating_mic: nil, start_date:, end_date:)
     if start_date == end_date
-      end_date += 1.day
+      start_date -= 1.day
     end
     with_provider_response do
       query = BasicYahooFinance::Query.new
